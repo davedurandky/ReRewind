@@ -196,6 +196,9 @@ html {
   flex-direction: column;
   gap: 20px;
   min-width: 300px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-right: 10px;
 }
 
 .filter-controls {
@@ -313,4 +316,49 @@ canvas {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Animation buttons */
+.animation-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.animation-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: #3d3d4a;
+  color: #f1f5f9;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.animation-btn:hover {
+  background-color: #4d4d5a;
+}
+
+.animation-btn.active {
+  background-color: #6366f1;
+}
+
+/* Add scrollbar styling */
+.controls-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.controls-container::-webkit-scrollbar-track {
+  background: #1e1e2e;
+  border-radius: 4px;
+}
+
+.controls-container::-webkit-scrollbar-thumb {
+  background: #3d3d4a;
+  border-radius: 4px;
+}
+
+.controls-container::-webkit-scrollbar-thumb:hover {
+  background: #4d4d5a;
 } 

@@ -11,16 +11,6 @@ A retro VHS-style image filter application that applies various glitch and disto
 - **Fluid Animation**: Creates liquid-like distortion effects with smooth animation
 - **Export Options**: Save your creations as PNG images or animated GIFs
 
-## Enhanced Filter Effects
-
-The application includes several sophisticated filter effects:
-
-- **Advanced Layer Variation**: Implements RGB channel splitting with dynamic offsets, edge detection, and subtle RGB noise for authentic VHS tracking issues.
-- **Realistic Static**: Creates authentic static noise with varying intensity, horizontal line glitches, pixel dropouts, and sync issues.
-- **Complex ZigZag**: Produces horizontal distortion with multi-wave patterns, occasional major glitches, and digital corruption artifacts.
-- **Authentic VHS Color Grade**: Applies sophisticated color grading with red emphasis, blue reduction, vignetting, film grain, and color bleeding.
-- **Fluid Animation**: Creates liquid-like distortions with bilinear interpolation for smooth results, color shifts, and caustics effects.
-
 ## Getting Started
 
 ### Prerequisites
