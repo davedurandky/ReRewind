@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './App.css';
 import { captureFrames, createGifFromFrames, downloadBlob } from './utils/gifExport';
+import GIF from 'gif.js';
 
 // Define interfaces for our settings
 interface FilterSettings {
@@ -9,6 +10,7 @@ interface FilterSettings {
   staticOnScreen: number;
   staticOnLayerSeparation: number;
   zigZag: number;
+  zigZagSpeed: number;  // Add new zigzag speed control
   duplicateSynth: number;
   liquidMesh: number;
   psychedelic: number;
@@ -30,6 +32,11 @@ interface Preset {
   animationSpeed: number;
 }
 
+interface AnimationSettings {
+  speed: number;
+  frameCount: number;
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isAnimating, setIsAnimating] = useState(true);
@@ -49,6 +56,7 @@ function App() {
     staticOnScreen: 3.0,
     staticOnLayerSeparation: 0.0,
     zigZag: 3.8,
+    zigZagSpeed: 1.0,  // Add default value
     duplicateSynth: 0.0,
     liquidMesh: 0.0,
     psychedelic: 0.0,
@@ -72,11 +80,17 @@ function App() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [exportDuration, setExportDuration] = useState<number>(5);
-  const [exportFormat, setExportFormat] = useState<'image' | 'gif' | 'video'>('image');
+  const [exportFormat, setExportFormat] = useState<'gif' | 'video' | 'image'>('gif');
   
   const [presets, setPresets] = useState<Preset[]>([]);
   const [showPresetDialog, setShowPresetDialog] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
+  
+  // Animation settings
+  const [animationSettings, setAnimationSettings] = useState<AnimationSettings>({
+    speed: 0.5,
+    frameCount: 60
+  });
   
   // Define all effect functions first
   const applyLayerVariation = (ctx: CanvasRenderingContext2D, intensity: number, time: number): { y: number, height: number }[] => {
@@ -391,144 +405,72 @@ function App() {
     if (layers && layers.length > 0) {
       layers.forEach(layer => {
         // Calculate horizontal offset based on zigzag pattern
-        // Add time-based variation for more dynamic effect
-        const waveFreq = 0.1 + (intensity * 0.02);
-        const timeScale = 2 + (intensity * 0.5);
+        // Speed is controlled by zigZagSpeed, intensity controls distortion amount
+        const waveFreq = 0.1;
+        const timeScale = filterSettings.zigZagSpeed * 0.5; // Slower base speed
         
-        // Create more complex wave patterns
-        let offsetX = Math.sin(layer.y * waveFreq + time * timeScale) * intensity * 3;
+        // Create more complex wave patterns with increased horizontal movement
+        let offsetX = Math.sin(layer.y * waveFreq + time * timeScale) * intensity * 2;
         
         // Add secondary wave for more complex movement
-        offsetX += Math.sin(layer.y * waveFreq * 2.7 + time * (timeScale * 0.6)) * intensity * 1.5;
+        offsetX += Math.sin(layer.y * waveFreq * 2.7 + time * (timeScale * 0.6)) * intensity;
         
-        // Add occasional glitch jumps
-        const glitchJump = (Math.random() < intensity / 30) ? 
-          (Math.random() - 0.5) * intensity * 20 : 0;
+        // Add occasional glitch jumps with reduced frequency
+        const glitchJump = (Math.random() < intensity / 50) ? 
+          (Math.random() - 0.5) * intensity * 10 : 0;
         
-        // Apply major glitch if active and in range
+        // Apply major glitch if active and in range (reduced effect)
         if (majorGlitchActive && layer.y >= glitchY && layer.y < glitchY + glitchHeight) {
-          // Major horizontal shift
-          offsetX = (Math.random() - 0.5) * width * 0.5;
+          // Major horizontal shift (reduced)
+          offsetX = (Math.random() - 0.5) * width * 0.3;
           
           // Occasionally reverse slice
-          if (Math.random() < 0.3) {
-            // Draw reversed slice
+          if (Math.random() < 0.2) {
             ctx.save();
             ctx.scale(-1, 1);
             ctx.drawImage(
               tempCanvas,
-              0, layer.y, width, layer.height,  // Source rectangle
-              -width - offsetX, layer.y, width, layer.height  // Destination rectangle (mirrored)
+              0, layer.y, width, layer.height,
+              -width - offsetX, layer.y, width, layer.height
             );
             ctx.restore();
-            return; // Skip the normal drawing for this layer
+            return;
           }
         }
         
         // Draw the slice with offset
         ctx.drawImage(
           tempCanvas,
-          0, layer.y, width, layer.height,  // Source rectangle
-          offsetX + glitchJump, layer.y, width, layer.height  // Destination rectangle
+          0, layer.y, width, layer.height,
+          offsetX + glitchJump, layer.y, width, layer.height
         );
-        
-        // Occasionally add color shift to slices
-        if (Math.random() < intensity / 20) {
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.3;
-          ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,255,0.3)';
-          ctx.fillRect(offsetX + glitchJump, layer.y, width, layer.height);
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = 1.0;
-        }
       });
-      } else {
+    } else {
       // Use regular slicing if no layers are provided
       for (let y = 0; y < height; y += sliceHeight) {
         const sliceY = Math.min(y, height);
         const sliceH = Math.min(sliceHeight, height - y);
         
         // Calculate horizontal offset based on zigzag pattern
-        // Add time-based variation for more dynamic effect
-        const waveFreq = 0.1 + (intensity * 0.02);
-        const timeScale = 2 + (intensity * 0.5);
+        const waveFreq = 0.1;
+        const timeScale = filterSettings.zigZagSpeed * 0.5; // Slower base speed
         
-        // Create more complex wave patterns
-        let offsetX = Math.sin(y * waveFreq + time * timeScale) * intensity * 3;
+        // Create more complex wave patterns with reduced intensity
+        let offsetX = Math.sin(y * waveFreq + time * timeScale) * intensity * 2;
         
         // Add secondary wave for more complex movement
-        offsetX += Math.sin(y * waveFreq * 2.7 + time * (timeScale * 0.6)) * intensity * 1.5;
+        offsetX += Math.sin(y * waveFreq * 2.7 + time * (timeScale * 0.6)) * intensity;
         
-        // Add occasional glitch jumps
-        const glitchJump = (Math.random() < intensity / 30) ? 
-          (Math.random() - 0.5) * intensity * 20 : 0;
-        
-        // Apply major glitch if active and in range
-        if (majorGlitchActive && y >= glitchY && y < glitchY + glitchHeight) {
-          // Major horizontal shift
-          offsetX = (Math.random() - 0.5) * width * 0.5;
-          
-          // Occasionally reverse slice
-          if (Math.random() < 0.3) {
-            // Draw reversed slice
-            ctx.save();
-            ctx.scale(-1, 1);
-            ctx.drawImage(
-              tempCanvas,
-              0, sliceY, width, sliceH,  // Source rectangle
-              -width - offsetX, sliceY, width, sliceH  // Destination rectangle (mirrored)
-            );
-            ctx.restore();
-            continue;
-          }
-        }
+        // Add occasional glitch jumps with reduced frequency
+        const glitchJump = (Math.random() < intensity / 50) ? 
+          (Math.random() - 0.5) * intensity * 10 : 0;
         
         // Draw the slice with offset
         ctx.drawImage(
           tempCanvas,
-          0, sliceY, width, sliceH,  // Source rectangle
-          offsetX + glitchJump, sliceY, width, sliceH  // Destination rectangle
+          0, sliceY, width, sliceH,
+          offsetX + glitchJump, sliceY, width, sliceH
         );
-        
-        // Occasionally add color shift to slices
-        if (Math.random() < intensity / 20) {
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.3;
-          ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,0,0,0.3)' : 'rgba(0,0,255,0.3)';
-          ctx.fillRect(offsetX + glitchJump, sliceY, width, sliceH);
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = 1.0;
-        }
-      }
-    }
-    
-    // Add digital corruption artifacts for high intensity
-    if (intensity > 7) {
-      // Create random blocks of corruption
-      const blockCount = Math.floor(intensity * 2);
-      
-      for (let i = 0; i < blockCount; i++) {
-        const blockX = Math.floor(Math.random() * width);
-        const blockY = Math.floor(Math.random() * height);
-        const blockW = Math.floor(Math.random() * 40) + 10;
-        const blockH = Math.floor(Math.random() * 20) + 5;
-        
-        // Get data from a random location
-        const sourceX = Math.floor(Math.random() * width);
-        const sourceY = Math.floor(Math.random() * height);
-        
-        // Draw corrupted block
-        ctx.drawImage(
-          tempCanvas,
-          sourceX, sourceY, blockW, blockH,  // Source rectangle
-          blockX, blockY, blockW, blockH     // Destination rectangle
-        );
-        
-        // Add digital artifacts
-        ctx.globalCompositeOperation = 'difference';
-        ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.5)`;
-        ctx.fillRect(blockX, blockY, blockW, blockH);
-        ctx.globalCompositeOperation = 'source-over';
       }
     }
   };
@@ -1123,7 +1065,7 @@ function App() {
               if (aspectRatio > 1920/1080) {
                 exportWidth = 1920;
                 exportHeight = Math.round(1920 / aspectRatio);
-              } else {
+    } else {
                 exportHeight = 1080;
                 exportWidth = Math.round(1080 * aspectRatio);
               }
@@ -1134,7 +1076,7 @@ function App() {
               if (aspectRatio > 1280/720) {
                 exportWidth = 1280;
                 exportHeight = Math.round(1280 / aspectRatio);
-              } else {
+      } else {
                 exportHeight = 720;
                 exportWidth = Math.round(720 * aspectRatio);
               }
@@ -1162,34 +1104,10 @@ function App() {
           throw new Error('Could not get export canvas context');
         }
         
-        // First draw the original image
-        exportCtx.drawImage(uploadedImage, 0, 0, exportWidth, exportHeight);
-        
-        // Apply effects with halved intensity
-        const halfIntensityFilters = {
-          ...filterSettings,
-          layerVariation: filterSettings.layerVariation * 0.5,
-          layerSeparation: filterSettings.layerSeparation * 0.5,
-          staticOnScreen: filterSettings.staticOnScreen * 0.5,
-          staticOnLayerSeparation: filterSettings.staticOnLayerSeparation * 0.5,
-          zigZag: filterSettings.zigZag * 0.5,
-          duplicateSynth: filterSettings.duplicateSynth * 0.5,
-          liquidMesh: filterSettings.liquidMesh * 0.5,
-          psychedelic: filterSettings.psychedelic * 0.5,
-          brightness: filterSettings.brightness * 0.5,
-          fibonacci: filterSettings.fibonacci * 0.5,
-          vhsColorGrade: filterSettings.vhsColorGrade * 0.5
-        };
-        
-        const halfIntensityFluid = {
-          ...fluidSettings,
-          flowSpeed: fluidSettings.flowSpeed * 0.5,
-          turbulence: fluidSettings.turbulence * 0.5,
-          colorShift: fluidSettings.colorShift * 0.5
-        };
-        
-        // Apply effects
-        applyEffects(exportCtx, frameCount, halfIntensityFilters, halfIntensityFluid, performance.now() / 1000);
+        // Draw blurred background first
+        drawBlurredBackground(exportCtx, uploadedImage);
+        // Then draw the effects on top
+        applyEffects(exportCtx, frameCount, filterSettings, fluidSettings, performance.now() / 1000);
         
         setExportProgress(50);
         loadingToast.textContent = 'Processing image...';
@@ -1230,109 +1148,51 @@ function App() {
   
   // Function to create and download a GIF
   const handleGifDownload = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !uploadedImage) return;
+    if (!canvasRef.current || !uploadedImage) return;
+
+    const gif = new GIF({
+      workers: 4,
+      quality: 10,
+      width: canvasRef.current.width,
+      height: canvasRef.current.height,
+      workerScript: '/gif.worker.js'
+    });
+
+    const frames = [];
+    const frameTime = 1000 / (30 * animationSettings.speed);
     
-    setIsExporting(true);
-    setExportProgress(0);
-    
-    const loadingToast = document.createElement('div');
-    loadingToast.textContent = 'Creating GIF...';
-    loadingToast.className = 'loading-toast';
-    document.body.appendChild(loadingToast);
-    
-    try {
-      // Calculate dimensions while maintaining aspect ratio
-      const aspectRatio = uploadedImage.width / uploadedImage.height;
-      let gifWidth = uploadedImage.width;
-      let gifHeight = uploadedImage.height;
+    for (let i = 0; i < animationSettings.frameCount; i++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasRef.current.width;
+      canvas.height = canvasRef.current.height;
+      const ctx = canvas.getContext('2d');
       
-      switch (exportQuality) {
-        case 'original':
-          break;
-        case 'high':
-          if (gifWidth > 1280 || gifHeight > 720) {
-            if (aspectRatio > 1280/720) {
-              gifWidth = 1280;
-              gifHeight = Math.round(1280 / aspectRatio);
-            } else {
-              gifHeight = 720;
-              gifWidth = Math.round(720 * aspectRatio);
-            }
-          }
-          break;
-        case 'medium':
-          if (gifWidth > 854 || gifHeight > 480) {
-            if (aspectRatio > 854/480) {
-              gifWidth = 854;
-              gifHeight = Math.round(854 / aspectRatio);
-            } else {
-              gifHeight = 480;
-              gifWidth = Math.round(480 * aspectRatio);
-            }
-          }
-          break;
-        case 'small':
-          if (gifWidth > 640 || gifHeight > 360) {
-            if (aspectRatio > 640/360) {
-              gifWidth = 640;
-              gifHeight = Math.round(640 / aspectRatio);
-            } else {
-              gifHeight = 360;
-              gifWidth = Math.round(360 * aspectRatio);
-            }
-          }
-          break;
+      if (ctx) {
+        // Draw blurred background first
+        drawBlurredBackground(ctx, uploadedImage);
+        // Then apply effects on top
+        applyEffects(ctx, i, filterSettings, fluidSettings, (i / animationSettings.frameCount) * Math.PI * 2);
       }
       
-      // Create a temporary canvas for the GIF frames
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = gifWidth;
-      tempCanvas.height = gifHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) throw new Error('Could not get temporary canvas context');
-      
-      // Calculate frame parameters
-      const baseFrameCount = Math.floor(30 * exportDuration); // 30fps
-      const frameCount = Math.max(10, Math.floor(baseFrameCount * animationSpeed));
-      const frameDelay = Math.floor(100 / animationSpeed);
-      
-      loadingToast.textContent = 'Capturing frames...';
-      
-      // Create frames with proper aspect ratio
-      const frames = await captureFrames(canvas, Math.floor(30 * exportDuration), (frameIndex: number) => {
-        setExportProgress(Math.floor((frameIndex / (30 * exportDuration)) * 50));
-      });
-      
-      if (frames.length === 0) {
-        throw new Error('Failed to capture frames');
-      }
-      
-      loadingToast.textContent = 'Creating GIF...';
-      const gifBlob = await createGifFromFrames(frames, gifWidth, gifHeight, frameDelay);
-      
-      setExportProgress(90);
-      loadingToast.textContent = 'Downloading GIF...';
-      downloadBlob(gifBlob, `reRewind-animation-${exportQuality}.gif`);
-      
-      setExportProgress(100);
-      loadingToast.textContent = 'GIF created successfully!';
-      
-      setTimeout(() => {
-        document.body.removeChild(loadingToast);
-        setIsExporting(false);
-        setExportProgress(0);
-      }, 2000);
-    } catch (error) {
-      console.error('Error creating GIF:', error);
-      loadingToast.textContent = 'Error creating GIF. Please try again.';
-      
-      setTimeout(() => {
-        document.body.removeChild(loadingToast);
-        setIsExporting(false);
-        setExportProgress(0);
-      }, 3000);
+      frames.push(canvas);
+      gif.addFrame(canvas, { delay: frameTime });
     }
+
+    // Always add first frame again to ensure seamless loop
+    if (frames.length > 0) {
+      gif.addFrame(frames[0], { delay: frameTime });
+    }
+
+    gif.on('finished', (blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'animation.gif';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    gif.render();
   };
   
   // Function to start a timed animation
@@ -1344,206 +1204,194 @@ function App() {
   
   // Function to create and download a video
   const handleVideoDownload = async () => {
+    if (!canvasRef.current || !uploadedImage) return;
+
     const canvas = canvasRef.current;
-    if (!canvas || !uploadedImage) return;
-    
-    setIsExporting(true);
-    setExportProgress(0);
-    
-    const loadingToast = document.createElement('div');
-    loadingToast.textContent = 'Creating video...';
-    loadingToast.className = 'loading-toast';
-    document.body.appendChild(loadingToast);
-    
+    const stream = canvas.captureStream(30);
+    const chunks: BlobPart[] = [];
+
     try {
-      // Calculate dimensions while maintaining aspect ratio
-      const aspectRatio = uploadedImage.width / uploadedImage.height;
-      let videoWidth = uploadedImage.width;
-      let videoHeight = uploadedImage.height;
-      
-      switch (exportQuality) {
-        case 'original':
-          break;
-        case 'high':
-          if (videoWidth > 1920 || videoHeight > 1080) {
-            if (aspectRatio > 1920/1080) {
-              videoWidth = 1920;
-              videoHeight = Math.round(1920 / aspectRatio);
-            } else {
-              videoHeight = 1080;
-              videoWidth = Math.round(1080 * aspectRatio);
-            }
-          }
-          break;
-        case 'medium':
-          if (videoWidth > 1280 || videoHeight > 720) {
-            if (aspectRatio > 1280/720) {
-              videoWidth = 1280;
-              videoHeight = Math.round(1280 / aspectRatio);
-            } else {
-              videoHeight = 720;
-              videoWidth = Math.round(720 * aspectRatio);
-            }
-          }
-          break;
-        case 'small':
-          if (videoWidth > 854 || videoHeight > 480) {
-            if (aspectRatio > 854/480) {
-              videoWidth = 854;
-              videoHeight = Math.round(854 / aspectRatio);
-            } else {
-              videoHeight = 480;
-              videoWidth = Math.round(480 * aspectRatio);
-            }
-          }
-          break;
-      }
-      
-      // Create a canvas for recording with correct dimensions
-      const recordCanvas = document.createElement('canvas');
-      recordCanvas.width = videoWidth;
-      recordCanvas.height = videoHeight;
-      const recordCtx = recordCanvas.getContext('2d');
-      if (!recordCtx) throw new Error('Could not get recording canvas context');
-      
-      // Create MediaRecorder
-      const stream = recordCanvas.captureStream(30);
-      
-      // Try different MIME types
-      const mimeTypes = [
-        'video/mp4;codecs=avc1.42E01E',
-        'video/mp4',
-        'video/webm;codecs=h264',
-        'video/webm'
-      ];
-      
-      let selectedMimeType = '';
-      for (const type of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(type)) {
-          selectedMimeType = type;
-          break;
-        }
-      }
-      
-      if (!selectedMimeType) {
-        throw new Error('No supported video format found');
-      }
-      
+      // Try MP4 first
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: selectedMimeType,
+        mimeType: 'video/mp4;codecs=h264',
         videoBitsPerSecond: 5000000
       });
-      
-      const chunks: Blob[] = [];
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-      
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: selectedMimeType.split(';')[0] });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `reRewind-animation-${exportQuality}-${exportDuration}s.mp4`;
+        a.download = 'reRewind-animation.mp4';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        loadingToast.textContent = 'Video created successfully!';
-        setTimeout(() => {
-          document.body.removeChild(loadingToast);
-          setIsExporting(false);
-          setExportProgress(0);
-        }, 2000);
       };
-      
+
       // Start recording
       mediaRecorder.start();
+
+      // Record for the duration based on frame count and speed
+      const recordingDuration = (animationSettings.frameCount / 30) * 1000 / animationSettings.speed;
       
-      // Animation loop for recording
-      const startTime = performance.now();
-      const animate = () => {
-        const progress = (performance.now() - startTime) / (exportDuration * 1000);
-        setExportProgress(Math.min(100, Math.round(progress * 100)));
-        
-        // Draw frame
-        recordCtx.drawImage(uploadedImage, 0, 0, videoWidth, videoHeight);
-        applyEffects(recordCtx, frameCount, filterSettings, fluidSettings, performance.now() / 1000);
-        
-        if (progress >= 1) {
-          mediaRecorder.stop();
-        } else {
-          requestAnimationFrame(animate);
-        }
-      };
-      
-      animate();
-      
-    } catch (error) {
-      console.error('Error creating video:', error);
-      loadingToast.textContent = 'Error creating video. Please try again.';
       setTimeout(() => {
-        document.body.removeChild(loadingToast);
-        setIsExporting(false);
-        setExportProgress(0);
-      }, 3000);
+        mediaRecorder.stop();
+      }, recordingDuration);
+
+    } catch (error) {
+      console.error('Error recording video:', error);
+      alert('Error recording video. Trying alternative method...');
+      // Will implement fallback methods next
     }
   };
 
-  // Now define applyEffects after all the individual effect functions
+  // Add masking helper function before drawBlurredBackground
+  const createPreviewMask = (ctx: CanvasRenderingContext2D, image: HTMLImageElement) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    
+    // Calculate dimensions to maintain aspect ratio
+    const scale = Math.min(
+      width / image.width,
+      height / image.height
+    );
+    const imageWidth = image.width * scale;
+    const imageHeight = image.height * scale;
+    const x = (width - imageWidth) / 2;
+    const y = (height - imageHeight) / 2;
+    
+    // Create mask path
+    ctx.beginPath();
+    ctx.rect(x, y, imageWidth, imageHeight);
+    ctx.closePath();
+    
+    return { x, y, width: imageWidth, height: imageHeight };
+  };
+
+  // Modify applyEffects to use masking
   const applyEffects = (ctx: CanvasRenderingContext2D, currentFrame: number, filters: FilterSettings, fluid: FluidSettings, time: number) => {
+    if (!uploadedImage) return;
+    
     const seconds = time % 60;
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
     
-    const layers = filters.layerVariation > 0 ? 
-      applyLayerVariation(ctx, filters.layerVariation, seconds) : [];
+    // Create mask for preview area
+    const mask = createPreviewMask(ctx, uploadedImage);
     
-    const gaps = filters.layerSeparation > 0 && layers.length > 0 ? 
-      applyLayerSeparation(ctx, filters.layerSeparation, layers) : [];
+    // Create a temporary canvas for the effects
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
     
-    if (filters.staticOnScreen > 0) {
-      applyStatic(ctx, filters.staticOnScreen);
+    // Draw blurred background first
+    drawBlurredBackground(ctx, uploadedImage);
+    
+    // Apply clipping mask
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(mask.x, mask.y, mask.width, mask.height);
+    ctx.clip();
+    
+    // Draw original image on temp canvas with proper positioning
+    tempCtx.clearRect(0, 0, width, height);
+    tempCtx.drawImage(uploadedImage, mask.x, mask.y, mask.width, mask.height);
+    
+    // Scale all filter intensities much more aggressively
+    const scaledFilters = {
+      ...filters,
+      layerVariation: filters.layerVariation * 0.1,    // Reduced by 90%
+      layerSeparation: filters.layerSeparation * 0.1,
+      staticOnScreen: filters.staticOnScreen * 0.08,    // Reduced by 92%
+      staticOnLayerSeparation: filters.staticOnLayerSeparation * 0.08,
+      zigZag: filters.zigZag * 0.05,                   // Reduced to 1/3 of previous intensity
+      duplicateSynth: filters.duplicateSynth * 0.15,
+      liquidMesh: filters.liquidMesh * 0.15,
+      psychedelic: filters.psychedelic * 0.15,
+      brightness: filters.brightness * 0.2,
+      fibonacci: filters.fibonacci * 0.15,
+      vhsColorGrade: filters.vhsColorGrade * 0.2
+    };
+
+    // Slow down the time factor significantly for smoother animations
+    const slowedTime = seconds * 0.33;  // Reduced to 1/3 speed
+
+    const layers = scaledFilters.layerVariation > 0 ? 
+      applyLayerVariation(tempCtx, scaledFilters.layerVariation, slowedTime) : [];
+    
+    const gaps = scaledFilters.layerSeparation > 0 && layers.length > 0 ? 
+      applyLayerSeparation(tempCtx, scaledFilters.layerSeparation, layers) : [];
+    
+    if (scaledFilters.staticOnScreen > 0) {
+      applyStatic(tempCtx, scaledFilters.staticOnScreen);
     }
     
-    if (filters.staticOnLayerSeparation > 0 && gaps.length > 0) {
-      applyStaticOnLayerSeparation(ctx, filters.staticOnLayerSeparation, gaps);
+    if (scaledFilters.staticOnLayerSeparation > 0 && gaps.length > 0) {
+      applyStaticOnLayerSeparation(tempCtx, scaledFilters.staticOnLayerSeparation, gaps);
     }
     
-    if (filters.zigZag > 0) {
-      applyZigZag(ctx, filters.zigZag, seconds, layers);
+    if (scaledFilters.zigZag > 0) {
+      applyZigZag(tempCtx, scaledFilters.zigZag, slowedTime, layers);
     }
     
-    if (filters.duplicateSynth > 0) {
-      applyDuplicateSynth(ctx, filters.duplicateSynth, seconds);
+    // Scale fluid effects even more aggressively
+    const scaledFluid = {
+      flowSpeed: fluid.flowSpeed * 0.1,      // Reduced by 90%
+      turbulence: fluid.turbulence * 0.1,
+      colorShift: fluid.colorShift * 0.1
+    };
+    
+    // Apply remaining effects with slowed time
+    if (scaledFilters.duplicateSynth > 0) {
+      applyDuplicateSynth(tempCtx, scaledFilters.duplicateSynth, slowedTime);
     }
     
-    if (filters.liquidMesh > 0) {
-      applyLiquidMesh(ctx, filters.liquidMesh, seconds);
+    if (scaledFilters.liquidMesh > 0) {
+      applyLiquidMesh(tempCtx, scaledFilters.liquidMesh, slowedTime);
     }
     
-    if (filters.psychedelic > 0) {
-      applyPsychedelic(ctx, filters.psychedelic, seconds);
+    if (scaledFilters.psychedelic > 0) {
+      applyPsychedelic(tempCtx, scaledFilters.psychedelic, slowedTime);
     }
     
-    if (filters.brightness > 0) {
-      applyBrightness(ctx, filters.brightness);
+    if (scaledFilters.brightness > 0) {
+      applyBrightness(tempCtx, scaledFilters.brightness);
     }
     
-    if (filters.fibonacci > 0) {
-      applyFibonacci(ctx, filters.fibonacci, seconds);
+    if (scaledFilters.fibonacci > 0) {
+      applyFibonacci(tempCtx, scaledFilters.fibonacci, slowedTime);
     }
     
-    if (filters.vhsColorGrade > 0) {
-      applyVHSColorGrade(ctx, filters.vhsColorGrade);
+    if (scaledFilters.vhsColorGrade > 0) {
+      applyVHSColorGrade(tempCtx, scaledFilters.vhsColorGrade);
     }
     
-    if (fluid.flowSpeed > 0) {
-      applyFluidAnimation(ctx, fluid.flowSpeed, seconds);
+    if (scaledFluid.flowSpeed > 0) {
+      applyFluidAnimation(tempCtx, scaledFluid.flowSpeed, slowedTime);
     }
     
-    if (fluid.turbulence > 0) {
-      applyTurbulence(ctx, fluid.turbulence, seconds);
+    if (scaledFluid.turbulence > 0) {
+      applyTurbulence(tempCtx, scaledFluid.turbulence, slowedTime);
     }
     
-    if (fluid.colorShift > 0) {
-      applyColorShift(ctx, fluid.colorShift, seconds);
+    if (scaledFluid.colorShift > 0) {
+      applyColorShift(tempCtx, scaledFluid.colorShift, slowedTime);
     }
+
+    // Draw the final result on top of the blurred background
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Remove clipping mask
+    ctx.restore();
   };
 
   // Add useEffect for canvas setup and animation
@@ -1586,7 +1434,10 @@ function App() {
         const x = (canvas.width - width) / 2;
         const y = (canvas.height - height) / 2;
 
-        // Draw image
+        // Draw blurred background first
+        drawBlurredBackground(ctx, uploadedImage);
+
+        // Draw image with proper positioning
         ctx.drawImage(uploadedImage, x, y, width, height);
 
         // Apply effects
@@ -1690,6 +1541,64 @@ function App() {
     setAnimationSpeed(preset.animationSpeed);
   };
 
+  const handleAnimationSettingsChange = (setting: keyof AnimationSettings, value: number | boolean) => {
+    setAnimationSettings(prev => ({
+      ...prev,
+      [setting]: value
+    }));
+  };
+
+  // Load default image on component mount
+  useEffect(() => {
+    const loadDefaultImage = () => {
+      const img = new Image();
+      img.onload = () => {
+        setUploadedImage(img);
+        setIsImageLoaded(true);
+      };
+      img.onerror = () => {
+        console.error('Error loading default image');
+      };
+      img.src = '/test-images/1_re.png';
+    };
+
+    loadDefaultImage();
+  }, []);
+
+  // Add helper function to draw blurred background
+  const drawBlurredBackground = (ctx: CanvasRenderingContext2D, image: HTMLImageElement) => {
+    // Save context state
+    ctx.save();
+    
+    // Calculate dimensions to maintain aspect ratio
+    const scale = Math.min(
+      ctx.canvas.width / image.width,
+      ctx.canvas.height / image.height
+    );
+    const width = image.width * scale;
+    const height = image.height * scale;
+    const x = (ctx.canvas.width - width) / 2;
+    const y = (ctx.canvas.height - height) / 2;
+    
+    // Draw blurred background
+    ctx.filter = 'blur(20px)';
+    ctx.globalAlpha = 0.5;
+    
+    // Scale up the blurred background slightly to cover edges
+    const blurScale = 1.1;
+    const blurWidth = width * blurScale;
+    const blurHeight = height * blurScale;
+    const blurX = x - (blurWidth - width) / 2;
+    const blurY = y - (blurHeight - height) / 2;
+    
+    ctx.drawImage(image, blurX, blurY, blurWidth, blurHeight);
+    
+    // Reset context state
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+  };
+
   return (
     <div className="app-container">
       <h1 className="vintage-font">ReRewind</h1>
@@ -1697,7 +1606,9 @@ function App() {
       <div className="editor-container">
         <div className="preview-container">
           <div className="preview-header">
-            <h2>Preview window</h2>
+            <div className="header-text">
+              <h2>Get your ReRe on    <span className="header-subtitle">Drag and drop it</span></h2>
+              </div>
             <div className="export-controls">
               <select 
                 className="quality-select"
@@ -1714,12 +1625,12 @@ function App() {
               <select
                 className="format-select"
                 value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as 'image' | 'gif' | 'video')}
+                onChange={(e) => setExportFormat(e.target.value as 'gif' | 'video' | 'image')}
                 disabled={isExporting}
               >
-                <option value="image">Static Image</option>
                 <option value="gif">Animated GIF</option>
                 <option value="video">Video</option>
+                <option value="image">Static Image</option>
               </select>
               
               {exportFormat !== 'image' && (
@@ -1733,8 +1644,8 @@ function App() {
                     disabled={isExporting}
                   /> s
               </div>
-              )}
-              
+            )}
+            
               <button 
                 className="download-btn" 
                 onClick={() => {
@@ -1785,14 +1696,15 @@ function App() {
               style={{
                 width: '100%',
                 height: '100%',
-                display: 'block'
+                display: 'block',
+                backgroundColor: '#000'
               }}
             />
             
             {!isImageLoaded && (
               <div className="upload-overlay">
-                <p>Drag & drop an image here</p>
-                <p>or</p>
+                <p className="upload-title">Get your ReRe on</p>
+                <p className="upload-subtitle">drag and drop your photo here</p>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -1880,8 +1792,20 @@ function App() {
                 step="0.1" 
                 value={filterSettings.zigZag}
                 onChange={(e) => handleFilterChange('zigZag', parseFloat(e.target.value))}
-                    />
-                  </div>
+              />
+            </div>
+
+            <div className="filter-slider">
+              <label>ZigZag Speed: {filterSettings.zigZagSpeed.toFixed(1)}x</label>
+              <input 
+                type="range" 
+                min="0.1" 
+                max="3" 
+                step="0.1" 
+                value={filterSettings.zigZagSpeed}
+                onChange={(e) => handleFilterChange('zigZagSpeed', parseFloat(e.target.value))}
+              />
+            </div>
             
             <div className="filter-slider">
               <label>Duplicate Synth: {filterSettings.duplicateSynth.toFixed(1)}</label>
@@ -1893,7 +1817,7 @@ function App() {
                 value={filterSettings.duplicateSynth}
                 onChange={(e) => handleFilterChange('duplicateSynth', parseFloat(e.target.value))}
               />
-              </div>
+            </div>
           </div>
           
           {/* Fluid Effects Controls */}
@@ -2004,72 +1928,27 @@ function App() {
           
           {/* Animation Controls */}
           <div className="filter-controls">
-            <h3>Animation</h3>
-            
+            <h3>Animation Settings</h3>
             <div className="filter-slider">
-              <label>Animation Speed: {(animationSpeed * 0.5).toFixed(1)}x</label>
-              <input 
-                type="range" 
-                min="0.2" 
-                max="2.0" 
-                step="0.1" 
-                value={animationSpeed}
-                onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
+              <label>Animation Speed: {animationSettings.speed.toFixed(1)}x</label>
+              <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.1"
+                value={animationSettings.speed}
+                onChange={(e) => handleAnimationSettingsChange('speed', parseFloat(e.target.value))}
               />
             </div>
-            
-            <div className="animation-buttons">
-              <button 
-                className={`animation-btn ${isAnimating && animationDuration === 5 ? 'active' : ''}`}
-                onClick={() => startTimedAnimation(5)}
-              >
-                Animate 5s
-              </button>
-              <button 
-                className={`animation-btn ${isAnimating && animationDuration === 10 ? 'active' : ''}`}
-                onClick={() => startTimedAnimation(10)}
-              >
-                Animate 10s
-              </button>
-            </div>
-            
-            {animationDuration > 0 && isAnimating && (
-              <div className="animation-progress">
-                <div className="progress-bar">
-                  <div 
-                    className="progress-fill" 
-                    style={{ width: `${animationProgress}%` }}
-                  ></div>
-                </div>
-                <div className="progress-text">
-                  {Math.round(animationProgress)}% - {(animationDuration * (animationProgress / 100)).toFixed(1)}s
-                </div>
-              </div>
-            )}
-            
-            <div className="toggle-container">
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={isAnimating} 
-                  onChange={() => {
-                    if (!isAnimating) {
-                      // When enabling animation, reset start time
-                      setAnimationStartTime(performance.now());
-                    }
-                    setIsAnimating(!isAnimating);
-                  }} 
-                />
-                Animation Enabled
-              </label>
-              {animationDuration > 0 && (
-                <button 
-                  className="reset-btn"
-                  onClick={() => setAnimationDuration(0)}
-                >
-                  ∞ Continuous
-                </button>
-              )}
+            <div className="filter-slider">
+              <label>Frame Count: {animationSettings.frameCount}</label>
+              <input
+                type="number"
+                min="10"
+                max="300"
+                value={animationSettings.frameCount}
+                onChange={(e) => handleAnimationSettingsChange('frameCount', parseInt(e.target.value))}
+              />
             </div>
           </div>
         </div>
@@ -2105,8 +1984,8 @@ function App() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+                  </div>
+                )}
 
       {/* Add Presets Section */}
       <div className="filter-controls">
@@ -2118,7 +1997,7 @@ function App() {
           >
             Save Current Settings
           </button>
-        </div>
+          </div>
         
         {presets.length > 0 && (
           <div className="presets-list">
@@ -2131,8 +2010,40 @@ function App() {
                 {preset.name}
               </button>
             ))}
+              </div>
+            )}
           </div>
-        )}
+
+      <div className="controls">
+        <div className="control-section">
+          <h3>Animation Settings</h3>
+          <div className="control-group">
+            <label>
+              Speed
+              <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.1"
+                value={animationSettings.speed}
+                onChange={(e) => handleAnimationSettingsChange('speed', parseFloat(e.target.value))}
+              />
+              <span>{animationSettings.speed.toFixed(1)}x</span>
+            </label>
+          </div>
+          <div className="control-group">
+            <label>
+              Frame Count
+              <input
+                type="number"
+                min="10"
+                max="300"
+                value={animationSettings.frameCount}
+                onChange={(e) => handleAnimationSettingsChange('frameCount', parseInt(e.target.value))}
+              />
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   );
